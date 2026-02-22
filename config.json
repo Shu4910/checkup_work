@@ -1,0 +1,5 @@
+{
+    "log_directory": "C:\\ProgramData\\ActivityMonitor\\logs",
+    "polling_interval": 30,
+    "log_retention_days": 90
+}
