@@ -112,3 +112,46 @@ class CSVLogger:
         except Exception as e:
             print(f"Error getting log files: {e}")
             return []
+
+    def get_today_summary(self, polling_interval=30):
+        """
+        本日のアクティビティを集計してサマリーを返す
+
+        Args:
+            polling_interval (int): ポーリング間隔（秒）
+
+        Returns:
+            dict: {
+                'active_seconds': int,
+                'locked_seconds': int,
+                'apps': {process_name: seconds}
+            }
+        """
+        log_file = self._get_log_file_path()
+        active_seconds = 0
+        locked_seconds = 0
+        apps = {}
+
+        if not log_file.exists():
+            return {'active_seconds': 0, 'locked_seconds': 0, 'apps': {}}
+
+        try:
+            with open(log_file, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    status = row.get('status', '')
+                    process_name = row.get('process_name', '')
+                    if status == 'locked':
+                        locked_seconds += polling_interval
+                    elif status == 'active':
+                        active_seconds += polling_interval
+                        if process_name:
+                            apps[process_name] = apps.get(process_name, 0) + polling_interval
+        except Exception as e:
+            print(f"Error reading today's log: {e}")
+
+        return {
+            'active_seconds': active_seconds,
+            'locked_seconds': locked_seconds,
+            'apps': apps
+        }

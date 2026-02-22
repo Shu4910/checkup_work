@@ -15,6 +15,10 @@ env/
 # ログファイル
 *.log
 
+# CSVログファイル（個人データ）
+logs/
+*.csv
+
 # OS生成ファイル
 .DS_Store
 Thumbs.db

@@ -5,14 +5,12 @@ import os
 import threading
 import pystray
 from PIL import Image, ImageDraw
-import win32api
-import win32con
 
 
 class TrayIcon:
     """システムトレイアイコン管理クラス"""
 
-    def __init__(self, app_name="Activity Monitor"):
+    def __init__(self, app_name="Productivity Tracker"):
         """
         Args:
             app_name (str): アプリケーション名
@@ -21,6 +19,7 @@ class TrayIcon:
         self.icon = None
         self.status_callback = None
         self.quit_callback = None
+        self.report_callback = None
 
     def create_image(self):
         """トレイアイコン用の画像を生成"""
@@ -39,33 +38,42 @@ class TrayIcon:
     def show_status(self, icon, item):
         """現在の状態を表示"""
         def _show():
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
             if self.status_callback:
                 status_text = self.status_callback()
             else:
-                status_text = "モニタリング実行中"
-            win32api.MessageBox(
-                0,
-                status_text,
-                self.app_name,
-                win32con.MB_OK | win32con.MB_ICONINFORMATION | win32con.MB_TOPMOST
-            )
-        threading.Thread(target=_show, daemon=True).start()
+                status_text = "トラッキング実行中"
+            messagebox.showinfo(self.app_name, status_text, parent=root)
+            root.destroy()
+        threading.Thread(target=_show).start()
+
+    def show_report(self, icon, item):
+        """本日のレポートを表示"""
+        def _show():
+            if self.report_callback:
+                self.report_callback(icon, item)
+        threading.Thread(target=_show).start()
 
     def quit_app(self, icon, item):
         """アプリケーションを終了"""
         def _quit():
-            result = win32api.MessageBox(
-                0,
-                "アプリケーションを終了しますか？",
-                "終了確認",
-                win32con.MB_YESNO | win32con.MB_ICONQUESTION | win32con.MB_TOPMOST
-            )
-            if result == win32con.IDYES:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            result = messagebox.askyesno("終了確認", "アプリケーションを終了しますか？", parent=root)
+            root.destroy()
+            if result:
                 if self.quit_callback:
                     self.quit_callback()
                 icon.stop()
                 os._exit(0)
-        threading.Thread(target=_quit, daemon=True).start()
+        threading.Thread(target=_quit).start()
 
     def set_status_callback(self, callback):
         """
@@ -85,10 +93,20 @@ class TrayIcon:
         """
         self.quit_callback = callback
 
+    def set_report_callback(self, callback):
+        """
+        レポート表示用のコールバックを設定
+
+        Args:
+            callback (callable): レポートを表示する関数
+        """
+        self.report_callback = callback
+
     def run(self):
         """トレイアイコンを表示して実行"""
         menu = pystray.Menu(
             pystray.MenuItem("現在の状態を表示", self.show_status),
+            pystray.MenuItem("本日のレポートを表示", self.show_report),
             pystray.MenuItem("終了", self.quit_app)
         )
 

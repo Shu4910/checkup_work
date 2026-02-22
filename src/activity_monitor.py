@@ -1,5 +1,6 @@
 """
-社員活動モニタリングアプリケーション メインモジュール
+個人生産性トラッカー メインモジュール
+自分自身のPC使用状況を記録して生産性を可視化するツール
 """
 import json
 import threading
@@ -19,7 +20,7 @@ from tray_icon import TrayIcon
 
 
 class ActivityMonitor:
-    """アクティビティモニタリングメインクラス"""
+    """生産性トラッキング メインクラス"""
 
     def __init__(self, config_path="config.json"):
         """
@@ -27,12 +28,18 @@ class ActivityMonitor:
             config_path (str): 設定ファイルのパス
         """
         self.config = self._load_config(config_path)
-        self.polling_interval = self.config.get('polling_interval', 60)
+        self.polling_interval = self.config.get('polling_interval', 30)
         self.is_running = False
         self.is_paused = False
 
+        log_dir = os.path.expandvars(
+            self.config.get(
+                'log_directory',
+                '%USERPROFILE%\\Documents\\ProductivityTracker\\logs'
+            )
+        )
         self.logger = CSVLogger(
-            self.config.get('log_directory', 'C:\\ProgramData\\ActivityMonitor\\logs'),
+            log_dir,
             self.config.get('log_retention_days', 90)
         )
 
@@ -42,10 +49,11 @@ class ActivityMonitor:
         self.power_monitor.add_callback('on_resume', self._on_resume)
 
         self.tray_icon = TrayIcon(
-            app_name="Activity Monitor"
+            app_name="Productivity Tracker"
         )
         self.tray_icon.set_status_callback(self._get_status_text)
         self.tray_icon.set_quit_callback(self._quit)
+        self.tray_icon.set_report_callback(self.show_today_report)
 
         self.last_activity_time = None
         self.polling_thread = None
@@ -65,21 +73,24 @@ class ActivityMonitor:
 
     def _on_suspend(self):
         """スリープ時の処理"""
-        print("System suspended - pausing monitoring")
+        print("System suspended - pausing tracking")
         self.is_paused = True
 
     def _on_resume(self):
         """スリープ復帰時の処理"""
-        print("System resumed - resuming monitoring")
+        print("System resumed - resuming tracking")
         self.is_paused = False
 
     def _get_status_text(self):
         """ステータステキストを取得"""
+        log_dir = os.path.expandvars(
+            self.config.get('log_directory', '%USERPROFILE%\\Documents\\ProductivityTracker\\logs')
+        )
         status_lines = [
-            f"アプリケーション: Activity Monitor",
+            f"アプリケーション: Productivity Tracker",
             f"状態: {'実行中' if self.is_running and not self.is_paused else '一時停止中' if self.is_paused else '停止'}",
             f"ポーリング間隔: {self.polling_interval}秒",
-            f"ログ保存先: {self.config.get('log_directory')}",
+            f"ログ保存先: {log_dir}",
         ]
 
         if self.last_activity_time:
@@ -155,9 +166,67 @@ class ActivityMonitor:
 
             time.sleep(self.polling_interval)
 
+    def show_today_report(self, icon, item):
+        """本日の生産性レポートをtkinterウィンドウで表示"""
+        import tkinter as tk
+
+        summary = self.logger.get_today_summary(self.polling_interval)
+
+        def fmt_seconds(sec):
+            h = sec // 3600
+            m = (sec % 3600) // 60
+            if h > 0:
+                return f"{h}時間{m:02d}分"
+            return f"{m}分"
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        active_str = fmt_seconds(summary.get('active_seconds', 0))
+        locked_str = fmt_seconds(summary.get('locked_seconds', 0))
+
+        apps = summary.get('apps', {})
+        top_apps = sorted(apps.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        lines = [
+            f"本日のアクティビティ ({today_str})",
+            "─" * 32,
+            f"アクティブ:    {active_str}",
+            f"離席/ロック:   {locked_str}",
+            "─" * 32,
+            "アプリ別使用時間 (上位5件):",
+        ]
+        for app_name, sec in top_apps:
+            lines.append(f"  {app_name:<20}{fmt_seconds(sec)}")
+
+        if not top_apps:
+            lines.append("  (記録なし)")
+
+        report_text = "\n".join(lines)
+
+        root = tk.Tk()
+        root.title("本日のレポート")
+        root.attributes('-topmost', True)
+        root.resizable(False, False)
+
+        frame = tk.Frame(root, padx=16, pady=12)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        label = tk.Label(
+            frame,
+            text=report_text,
+            font=("Consolas", 11),
+            justify=tk.LEFT,
+            anchor="w"
+        )
+        label.pack(fill=tk.BOTH, expand=True)
+
+        btn = tk.Button(frame, text="閉じる", command=root.destroy, width=10)
+        btn.pack(pady=(8, 0))
+
+        root.mainloop()
+
     def start(self):
-        """モニタリングを開始"""
-        print("Starting Activity Monitor...")
+        """トラッキングを開始"""
+        print("Starting Productivity Tracker...")
         self.is_running = True
 
         self.power_monitor.start_monitoring()
