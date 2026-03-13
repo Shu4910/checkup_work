@@ -3,6 +3,7 @@
 """
 import os
 import threading
+from pathlib import Path
 import pystray
 from PIL import Image, ImageDraw
 
@@ -23,16 +24,19 @@ class TrayIcon:
 
     def create_image(self):
         """トレイアイコン用の画像を生成"""
-        width = 64
-        height = 64
-        image = Image.new('RGB', (width, height), color='blue')
+        icon_path = Path(__file__).parent.parent / "neinei.png"
+        if icon_path.exists():
+            try:
+                return Image.open(icon_path).convert("RGBA").resize((64, 64), Image.LANCZOS)
+            except Exception:
+                pass
+
+        # フォールバック: デフォルトの青い円
+        image = Image.new('RGB', (64, 64), color='blue')
         dc = ImageDraw.Draw(image)
-
         dc.ellipse([10, 10, 54, 54], fill='white', outline='blue')
-
         dc.rectangle([28, 20, 36, 35], fill='blue')
         dc.ellipse([24, 37, 40, 50], fill='blue')
-
         return image
 
     def show_status(self, icon, item):
