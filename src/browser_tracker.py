@@ -50,6 +50,12 @@ def _get_chromium_info(window_title, hwnd=0):
     Returns:
         dict: {'url': str, 'page_title': str}
     """
+    page_title = window_title
+    if ' - ' in window_title:
+        parts = window_title.rsplit(' - ', 1)
+        if len(parts) == 2:
+            page_title = parts[0]
+
     try:
         import uiautomation as auto
 
@@ -58,49 +64,60 @@ def _get_chromium_info(window_title, hwnd=0):
             window = auto.ControlFromHandle(hwnd)
 
         if window is None or not window.Exists(0, 0):
-            window = auto.PaneControl(searchDepth=1, Name=window_title)
+            window = auto.PaneControl(ClassName="Chrome_WidgetWin_1", searchDepth=2)
 
-        if window and window.Exists(0, 0):
-            edit_control = None
-            for name in ["アドレスと検索バー", "Address and search bar"]:
+        if window is None or not window.Exists(0, 0):
+            return {'url': '', 'page_title': page_title}
+
+        url = ''
+        edit_control = None
+
+        # 戦略1: ToolBar 内の EditControl（最も確実）
+        try:
+            toolbar = window.ToolBarControl(searchDepth=8)
+            if toolbar.Exists(0, 0):
+                ctrl = toolbar.EditControl(searchDepth=3)
+                if ctrl.Exists(0, 0):
+                    edit_control = ctrl
+        except Exception:
+            pass
+
+        # 戦略2: Name で検索（日本語・英語）
+        if edit_control is None:
+            for name in ["アドレスと検索バー", "Address and search bar",
+                         "Search Google or type a URL"]:
                 try:
-                    ctrl = window.EditControl(searchDepth=10, Name=name)
+                    ctrl = window.EditControl(searchDepth=12, Name=name)
                     if ctrl.Exists(0, 0):
                         edit_control = ctrl
                         break
-                except:
+                except Exception:
                     pass
 
-            url = ''
-            if edit_control:
+        # 戦略3: AutomationId で検索
+        if edit_control is None:
+            try:
+                ctrl = window.EditControl(searchDepth=12, AutomationId="OmniboxViewViews")
+                if ctrl.Exists(0, 0):
+                    edit_control = ctrl
+            except Exception:
+                pass
+
+        if edit_control:
+            try:
+                url = edit_control.GetValuePattern().Value
+            except Exception:
+                pass
+            if not url:
                 try:
-                    url = edit_control.GetValuePattern().Value
-                except:
+                    url = edit_control.GetLegacyIAccessiblePattern().Value
+                except Exception:
                     pass
-                if not url:
-                    try:
-                        url = edit_control.GetLegacyIAccessiblePattern().Value
-                    except:
-                        pass
 
-            page_title = window_title
-            if ' - ' in window_title:
-                parts = window_title.rsplit(' - ', 1)
-                if len(parts) == 2:
-                    page_title = parts[0]
+        return {'url': url if url else '', 'page_title': page_title}
 
-            return {
-                'url': url if url else '',
-                'page_title': page_title if page_title else ''
-            }
     except Exception as e:
         print(f"Error in _get_chromium_info: {e}")
-
-    page_title = window_title
-    if ' - ' in window_title:
-        parts = window_title.rsplit(' - ', 1)
-        if len(parts) == 2:
-            page_title = parts[0]
 
     return {'url': '', 'page_title': page_title}
 
